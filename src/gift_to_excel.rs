@@ -1,7 +1,7 @@
 use regex::Regex;
 
-const QUESTION_PATTERN: &'static str = r#"::::\[choice\](.*?)(\\:)?\s*\["#;
-const ANSWER_PATTERN: &'static str = r#"\s*([=~])(.*?)#?\s*$"#;
+const QUESTION_PATTERN: &str = r"::::\[choice\](.*?)(\\:)?\s*\[";
+const ANSWER_PATTERN: &str = r"\s*([=~])(.*?)#?\s*$";
 
 pub struct Chunk(pub Vec<String>);
 
@@ -52,7 +52,7 @@ pub fn convert(input_filename: &str, output_filename: &str) -> anyhow::Result<()
 
     for question in questions {
         writer.write_record(
-            vec![
+            [
                 vec![question.category],
                 vec![question.text],
                 question.answers,
@@ -100,36 +100,32 @@ pub fn parse_chunk(
 
     let mut correct_answer = 0;
     let answers = {
-        let mut answers = vec![];
         chunk
             .0
             .iter()
             .skip(3)
             .filter(|line| line.len() > 1)
+            .map(|line| answer_matcher.captures(line))
             .enumerate()
-            .for_each(|(i, line)| {
-                let Some(captures) = answer_matcher.captures(line) else {
-                    println!("Error parsing line: {}", line);
-                    panic!();
-                };
+            .filter_map(|(i, caps)| {
+                let captures = caps?;
 
-                if captures.get(1).unwrap().as_str() == "=" {
+                if captures.get(1)?.as_str() == "=" {
                     correct_answer = i;
                 }
 
-                let answer = captures.get(2).unwrap().as_str().to_string();
-                answers.push(answer);
-            });
-        answers
+                let answer = captures.get(2)?.as_str().to_string();
+                Some(answer)
+            })
+            .collect()
     };
 
-    let correct_answer_letter =
-        char::from_u32(u32::try_from(correct_answer)? + 65).ok_or_else(|| {
-            anyhow::anyhow!(
-                "Error converting correct answer index to letter: {}",
-                correct_answer
-            )
-        })?;
+    let correct_answer_letter = match correct_answer {
+        0 => "A",
+        1 => "B",
+        2 => "C",
+        _ => panic!("Invalid correct answer"),
+    };
 
     Ok(Question {
         category,
