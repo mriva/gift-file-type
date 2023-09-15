@@ -1,27 +1,35 @@
 use regex::Regex;
 
-const QUESTION_PATTERN: &'static str = r#"::::\[choice\](.*?)(\:)?\s*\["#;
-const ANSWER_PATTERN: &'static str = r#"\s*([=~])(.*)#"#;
+const QUESTION_PATTERN: &'static str = r#"::::\[choice\](.*?)(\\:)?\s*\["#;
+const ANSWER_PATTERN: &'static str = r#"\s*([=~])(.*?)#?\s*$"#;
 
 pub struct Chunk(pub Vec<String>);
 
 struct ChunkIterator {
     input: String,
-    current_position: u8,
+    current_position: usize,
 }
 
 impl Iterator for ChunkIterator {
     type Item = Chunk;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let chunk = self
-            .input
-            .lines()
-            .take_while(|l| l.len() > 0)
-            .map(|l| l.to_string())
-            .collect();
+        let chunk = Chunk(
+            self.input
+                .lines()
+                .skip(self.current_position)
+                .take_while(|l| l.len() > 0)
+                .map(|l| html_escape::decode_html_entities(l).to_string())
+                .collect(),
+        );
 
-        Some(Chunk(chunk))
+        if chunk.0.len() < 1 {
+            return None;
+        }
+
+        self.current_position += chunk.0.len() + 1;
+
+        Some(chunk)
     }
 }
 
@@ -32,7 +40,50 @@ pub struct Question {
     correct_answer: String,
 }
 
-pub fn convert() {}
+pub fn convert(input_filename: &str, output_filename: &str) -> anyhow::Result<()> {
+    let input_content = std::fs::read_to_string(input_filename)?;
+
+    let question_matcher = Regex::new(QUESTION_PATTERN).unwrap();
+    let answer_matcher = Regex::new(ANSWER_PATTERN).unwrap();
+
+    let questions = parse_input(&input_content, question_matcher, answer_matcher)?;
+
+    let mut writer = csv::Writer::from_path(output_filename)?;
+
+    for question in questions {
+        writer.write_record(
+            vec![
+                vec![question.category],
+                vec![question.text],
+                question.answers,
+                vec![question.correct_answer],
+            ]
+            .concat(),
+        )?;
+    }
+
+    Ok(())
+}
+
+fn parse_input(
+    input: &str,
+    question_matcher: Regex,
+    answer_matcher: Regex,
+) -> anyhow::Result<Vec<Question>> {
+    let mut chunk_iterator = ChunkIterator {
+        input: input.to_string(),
+        current_position: 0,
+    };
+
+    let mut questions = vec![];
+
+    while let Some(chunk) = chunk_iterator.next() {
+        let question = parse_chunk(chunk, question_matcher.clone(), answer_matcher.clone())?;
+        questions.push(question);
+    }
+
+    Ok(questions)
+}
 
 pub fn parse_chunk(
     chunk: Chunk,
@@ -57,11 +108,17 @@ pub fn parse_chunk(
             .enumerate()
             .filter(|(_, line)| line.len() > 1)
             .for_each(|(i, line)| {
-                let captures = answer_matcher.captures(line).unwrap();
+                let Some(captures) = answer_matcher.captures(line) else {
+                    println!("Error parsing line: {}", line);
+                    panic!();
+                };
+
                 if captures.get(1).unwrap().as_str() == "=" {
                     correct_answer = i;
                 }
-                answers.push(captures.get(1).unwrap().as_str().to_string());
+                let answer = captures.get(2).unwrap().as_str().to_string();
+                println!("Answer: {}", answer);
+                answers.push(answer);
             });
         answers
     };

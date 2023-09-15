@@ -15,6 +15,6 @@ pub struct Args {
 
 #[derive(ValueEnum, Debug, Clone)]
 pub enum Direction {
-    GiftToExcel,
-    ExcelToGift,
+    GiftToCsv,
+    CsvToGift,
 }
