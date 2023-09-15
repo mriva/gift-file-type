@@ -43,8 +43,8 @@ pub struct Question {
 pub fn convert(input_filename: &str, output_filename: &str) -> anyhow::Result<()> {
     let input_content = std::fs::read_to_string(input_filename)?;
 
-    let question_matcher = Regex::new(QUESTION_PATTERN).unwrap();
-    let answer_matcher = Regex::new(ANSWER_PATTERN).unwrap();
+    let question_matcher = Regex::new(QUESTION_PATTERN)?;
+    let answer_matcher = Regex::new(ANSWER_PATTERN)?;
 
     let questions = parse_input(&input_content, question_matcher, answer_matcher)?;
 
@@ -123,13 +123,19 @@ pub fn parse_chunk(
         answers
     };
 
+    let correct_answer_letter =
+        char::from_u32(u32::try_from(correct_answer)? + 65).ok_or_else(|| {
+            anyhow::anyhow!(
+                "Error converting correct answer index to letter: {}",
+                correct_answer
+            )
+        })?;
+
     Ok(Question {
         category,
         text: question,
         answers,
-        correct_answer: char::from_u32(correct_answer as u32 + 65)
-            .unwrap()
-            .to_string(),
+        correct_answer: correct_answer_letter.to_string(),
     })
 }
 
