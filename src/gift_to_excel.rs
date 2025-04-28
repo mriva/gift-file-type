@@ -40,6 +40,18 @@ pub struct Question {
     correct_answer: String,
 }
 
+impl Question {
+    fn to_csv_record(&self) -> Vec<String> {
+        [
+            vec![self.category.clone()],
+            vec![self.text.clone()],
+            self.answers.clone(),
+            vec![self.correct_answer.clone()],
+        ]
+        .concat()
+    }
+}
+
 pub fn convert(input_filename: &str, output_filename: &str) -> anyhow::Result<()> {
     let input_content = std::fs::read_to_string(input_filename)?;
 
@@ -51,15 +63,7 @@ pub fn convert(input_filename: &str, output_filename: &str) -> anyhow::Result<()
     let mut writer = csv::Writer::from_path(output_filename)?;
 
     for question in questions {
-        writer.write_record(
-            [
-                vec![question.category],
-                vec![question.text],
-                question.answers,
-                vec![question.correct_answer],
-            ]
-            .concat(),
-        )?;
+        writer.write_record(question.to_csv_record())?;
     }
 
     Ok(())
